@@ -2,6 +2,7 @@ package org.serverct.parrot.parrotx.utils;
 
 import com.cryptomorin.xseries.XEnchantment;
 import com.cryptomorin.xseries.XMaterial;
+import org.apache.commons.lang.StringUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -9,6 +10,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -18,6 +20,7 @@ import org.serverct.parrot.parrotx.ParrotX;
 import org.serverct.parrot.parrotx.data.MappedData;
 import org.serverct.parrot.parrotx.utils.i18n.I18n;
 
+import java.lang.reflect.Constructor;
 import java.util.*;
 import java.util.function.Function;
 
@@ -37,12 +40,28 @@ public class ItemUtil {
                 return result;
             }
 
+            final int amount = data.getInt("Amount", 1);
+            result.setAmount(amount);
+
             ItemMeta meta = result.getItemMeta();
             if (Objects.isNull(meta)) {
                 meta = Bukkit.getItemFactory().getItemMeta(result.getType());
             }
             if (Objects.isNull(meta)) {
                 return result;
+            }
+
+            final int damage = data.getInt("Durability", -1);
+            if (damage != -1) {
+                if (XMaterial.isNewVersion()) {
+                    if (meta instanceof Damageable) {
+                        final Damageable damageable = (Damageable) meta;
+                        damageable.setDamage(damage);
+                    }
+                } else {
+                    //noinspection deprecation
+                    result.setDurability((short) damage);
+                }
             }
 
             final String display = data.getString("Display");
@@ -74,7 +93,7 @@ public class ItemUtil {
                 }
             }
 
-            if (data.containsKey("ItemFlags")) {
+            if (XMaterial.supports(8) && data.containsKey("ItemFlags")) {
                 final List<String> flags = data.getList("ItemFlags", String.class);
                 for (final String name : flags) {
                     final ItemFlag flag = EnumUtil.valueOf(ItemFlag.class, name.toUpperCase());
@@ -100,7 +119,7 @@ public class ItemUtil {
         if (itemSection == null) {
             return new ItemStack(Material.AIR);
         }
-        return build(itemSection.getValues(false), ItemUtil::getByXMaterial);
+        return build(itemSection.getValues(false), ItemUtil::compatibleGet);
     }
 
     @NotNull
@@ -113,8 +132,27 @@ public class ItemUtil {
         return build(itemSection.getValues(false), constructor);
     }
 
+    @SuppressWarnings("JavaReflectionMemberAccess")
     @NotNull
-    public static ItemStack getByXMaterial(final String material) {
+    public static ItemStack compatibleGet(final String material) {
+        if (StringUtils.isNumeric(material)) {
+            try {
+                final int id = Integer.parseInt(material);
+                final Constructor<ItemStack> constructor = ItemStack.class.getConstructor(int.class);
+                return constructor.newInstance(id);
+            } catch (NoSuchMethodException exception) {
+                ParrotX.log("尝试构建数字 Material 的物品, 但是获取数字 ID 构造器失败: &c{0}&r.", material);
+            } catch (Throwable error) {
+                ParrotX.log("尝试兼容性获取物品失败: &c{0}&r.", material);
+                error.printStackTrace();
+            }
+        }
+
+        final Material vanilla = EnumUtil.getMaterial(material.toUpperCase());
+        if (Objects.nonNull(vanilla)) {
+            return new ItemStack(vanilla);
+        }
+
         final Optional<XMaterial> xMaterial = XMaterial.matchXMaterial(material);
         if (!xMaterial.isPresent()) {
             return new ItemStack(Material.AIR);
@@ -146,28 +184,48 @@ public class ItemUtil {
             itemSection.set("Material", item.getType().name());
         }
 
+        final int amount = item.getAmount();
+        if (amount > 1) {
+            itemSection.set("Amount", amount);
+        }
+
         final ItemMeta meta = item.getItemMeta();
         if (Objects.isNull(meta)) {
             return;
         }
 
+        if (XMaterial.isNewVersion()) {
+            if (meta instanceof Damageable) {
+                final Damageable damage = (Damageable) meta;
+                itemSection.set("Durability", damage.getDamage());
+            }
+        } else {
+            //noinspection deprecation
+            itemSection.set("Durability", item.getDurability());
+        }
+
         if (meta.hasDisplayName()) {
             itemSection.set("Display", meta.getDisplayName());
         }
+
         if (meta.hasLore()) {
             final List<String> lore = new ArrayList<>(Optional.ofNullable(meta.getLore()).orElse(new ArrayList<>()));
             lore.replaceAll(content -> I18n.deColor(content, '&'));
             itemSection.set("Lore", lore);
         }
+
         if (meta.hasEnchants()) {
             final ConfigurationSection enchantSection = itemSection.createSection("Enchants");
             meta.getEnchants().forEach((enchant, lvl) -> enchantSection.set(enchant.getKey().getKey(), lvl));
         }
-        Set<ItemFlag> flags = meta.getItemFlags();
-        if (!flags.isEmpty()) {
-            final List<String> flagList = new ArrayList<>();
-            flags.forEach(flag -> flagList.add(flag.name()));
-            itemSection.set("ItemFlags", flagList);
+
+        if (XMaterial.supports(8)) {
+            Set<ItemFlag> flags = meta.getItemFlags();
+            if (!flags.isEmpty()) {
+                final List<String> flagList = new ArrayList<>();
+                flags.forEach(flag -> flagList.add(flag.name()));
+                itemSection.set("ItemFlags", flagList);
+            }
         }
     }
 
@@ -186,6 +244,19 @@ public class ItemUtil {
         return name;
     }
 
+    @NotNull
+    public static String getName(@NotNull final PPlugin plugin, @Nullable final ItemStack item) {
+        if (Objects.isNull(item)) {
+            return "无效物品";
+        }
+
+        final ItemMeta meta = item.getItemMeta();
+        final String display = BasicUtil.canReturn(meta, ItemMeta::getDisplayName);
+        if (StringUtils.isEmpty(display)) {
+            return getName(plugin, item.getType());
+        }
+        return display;
+    }
 
     @Contract("null, _, _ -> null;!null, _, _ -> !null")
     @Nullable

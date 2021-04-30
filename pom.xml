@@ -6,7 +6,7 @@
 
     <groupId>org.serverct.parrot</groupId>
     <artifactId>ParrotX</artifactId>
-    <version>1.4.7.14-alpha</version>
+    <version>1.4.7.21-alpha</version>
     <packaging>jar</packaging>
 
     <name>ParrotX</name>
@@ -121,13 +121,13 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.18</version>
+            <version>1.18.20</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.jetbrains</groupId>
             <artifactId>annotations</artifactId>
-            <version>18.0.0</version>
+            <version>20.1.0</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -151,7 +151,7 @@
         <dependency>
             <groupId>com.github.cryptomorin</groupId>
             <artifactId>XSeries</artifactId>
-            <version>7.8.0</version>
+            <version>7.9.1.1</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -163,7 +163,7 @@
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
-            <version>3.4.5</version>
+            <version>4.0.3</version>
             <scope>compile</scope>
         </dependency>
         <dependency>

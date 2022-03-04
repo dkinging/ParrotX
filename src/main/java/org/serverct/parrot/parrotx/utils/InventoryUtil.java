@@ -10,6 +10,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.serverct.parrot.parrotx.PPlugin;
+import org.serverct.parrot.parrotx.ParrotX;
 
 import java.util.*;
 import java.util.function.Predicate;
@@ -22,8 +23,8 @@ public class InventoryUtil {
         final Map<Integer, ItemStack> result = new HashMap<>();
         for (int slot = 0; slot < inv.getSize(); slot++) {
             final ItemStack item = inv.getItem(slot);
-            if (filter.test(item)) {
-                result.put(slot, item);
+            if (item != null && filter.test(item)) {
+                result.put(slot, item.clone());
             }
         }
         return result;
@@ -117,19 +118,34 @@ public class InventoryUtil {
         }
 
         int left = amount;
-        for (final ItemStack value : filter.values()) {
+        for (Map.Entry<Integer, ItemStack> entry : filter.entrySet()) {
+            final int index = entry.getKey();
+            final ItemStack value = entry.getValue();
             final int stack = value.getAmount();
 
             if (left >= stack) {
-                inventory.removeItem(value);
+                final Map<Integer, ItemStack> map = inventory.removeItem(value);
+                if (!map.isEmpty()) {
+                    ParrotX.debug("移除物品失败: &c{0}&r.", map);
+                    return false;
+                }
                 left -= stack;
                 continue;
             }
 
             value.setAmount(stack - left);
+            inventory.setItem(index, value);
             break;
         }
-        return true;
+
+
+        final int after = count(inventory, checker);
+        final boolean value = exist - after >= amount;
+        if (!value) {
+            ParrotX.debug("移除物品后检查失败: Exist &e{0}&r, After &e{1}&r, Amount &e{2}&r.",
+                    exist, after, amount);
+        }
+        return value;
     }
 
     public static void openInventory(@NonNull PPlugin plugin, @NonNull Player user, @NonNull Inventory inventory) {

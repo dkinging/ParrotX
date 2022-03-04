@@ -21,6 +21,7 @@ import org.serverct.parrot.parrotx.utils.ItemUtil;
 import org.serverct.parrot.parrotx.utils.i18n.I18n;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.text.MessageFormat;
 import java.util.*;
@@ -65,7 +66,13 @@ public abstract class Autoloader {
                     ItemUtil.save(target, item);
                 }),
                 new SimpleLoader<>(Vector.class, ConfigurationSection::getVector),
-                new SimpleLoader<>(ConfigurationSection.class, ConfigurationSection::getConfigurationSection),
+                new SimpleLoader<>(ConfigurationSection.class, (section, path) -> {
+                    final ConfigurationSection exist = section.getConfigurationSection(path);
+                    if (Objects.nonNull(exist)) {
+                        return exist;
+                    }
+                    return section.createSection(path);
+                }),
                 new SimpleLoader<>(UUID.class, (section, path) -> {
                     final String uuid = section.getString(path);
                     if (Objects.isNull(uuid)) {
@@ -227,7 +234,13 @@ public abstract class Autoloader {
             classes.add(start);
 
             final Type type = start.getGenericSuperclass();
-            final String classpath = type.getTypeName();
+            final String classpath;
+            if (type instanceof ParameterizedType) {
+                classpath = ((ParameterizedType) type).getRawType().getTypeName();
+            } else {
+                classpath = type.getTypeName();
+            }
+
             if (!classpath.contains(packageName)) {
                 return classes;
             }

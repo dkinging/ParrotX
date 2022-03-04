@@ -1,5 +1,6 @@
 package org.serverct.parrot.parrotx.data;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -15,14 +16,17 @@ import java.io.IOException;
 
 public abstract class PData implements UniqueData, FileSaved {
 
+    private final String typeName;
     protected PPlugin plugin;
     protected I18n lang;
     protected PID id;
+    @Getter
+    @Setter
     protected File file;
     protected FileConfiguration data;
-    private final String typeName;
+    @Getter
     @Setter
-    private boolean readOnly = false;
+    private boolean readonly = false;
 
     public PData(PID id, File file, String typeName) {
         this.plugin = id.getPlugin();
@@ -35,9 +39,6 @@ public abstract class PData implements UniqueData, FileSaved {
 
     @Override
     public void save() {
-        if (readOnly) {
-            return;
-        }
         try {
             Autoloader.execute(plugin, this.data, this, false);
             this.data.save(this.file);
@@ -65,23 +66,8 @@ public abstract class PData implements UniqueData, FileSaved {
     }
 
     @Override
-    public boolean isReadOnly() {
-        return this.readOnly;
-    }
-
-    @Override
     public String getFilename() {
         return FileUtil.getNoExFilename(this.file);
-    }
-
-    @Override
-    public File getFile() {
-        return this.file;
-    }
-
-    @Override
-    public void setFile(@NonNull File file) {
-        this.file = file;
     }
 
     @Override

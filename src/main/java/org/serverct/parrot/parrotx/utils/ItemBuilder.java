@@ -12,16 +12,19 @@ import org.jetbrains.annotations.Nullable;
 import org.serverct.parrot.parrotx.utils.i18n.I18n;
 
 import java.util.*;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+@SuppressWarnings({"UnusedReturnValue", "unused"})
 public class ItemBuilder {
 
+    private final List<String> lore = new ArrayList<>();
+    private final Map<Enchantment, Integer> enchants = new HashMap<>();
+    private final List<ItemFlag> flags = new ArrayList<>();
     private String display;
     private XMaterial material;
     private int amount;
-    private List<String> lore;
-    private Map<Enchantment, Integer> enchants;
-    private List<ItemFlag> flags;
 
     @NotNull
     public static ItemBuilder start() {
@@ -29,8 +32,44 @@ public class ItemBuilder {
     }
 
     @NotNull
+    public static ItemBuilder start(@NotNull final ItemStack item) {
+        return start().fromItem(item);
+    }
+
+    @NotNull
+    public ItemBuilder fromItem(@NotNull final ItemStack item) {
+        this.material = XMaterial.matchXMaterial(item);
+        this.amount = item.getAmount();
+
+        this.enchants.clear();
+        this.enchants.putAll(item.getEnchantments());
+
+        Optional.ofNullable(item.getItemMeta()).ifPresent(meta -> {
+            //noinspection ConstantConditions
+            Optional.ofNullable(meta.getDisplayName()).ifPresent(name -> this.display = name);
+
+            Optional.ofNullable(meta.getLore()).ifPresent(lore -> {
+                this.lore.clear();
+                this.lore.addAll(lore);
+            });
+
+            if (XMaterial.supports(8)) {
+                this.flags.clear();
+                this.flags.addAll(meta.getItemFlags());
+            }
+        });
+        return this;
+    }
+
+    @NotNull
     public ItemBuilder display(@Nullable final String display) {
         this.display = display;
+        return this;
+    }
+
+    @NotNull
+    public ItemBuilder display(@Nullable final String display, @Nullable Object... args) {
+        this.display = I18n.color(display, args);
         return this;
     }
 
@@ -47,12 +86,25 @@ public class ItemBuilder {
     }
 
     @NotNull
-    public ItemBuilder lore(@Nullable final List<String> lore) {
+    public ItemBuilder clearLore() {
+        this.lore.clear();
+        return this;
+    }
+
+    @NotNull
+    public ItemBuilder topLore(@Nullable final List<String> lore) {
         if (Objects.isNull(lore)) {
             return this;
         }
-        if (Objects.isNull(this.lore)) {
-            this.lore = new ArrayList<>();
+
+        this.lore.addAll(0, lore);
+        return this;
+    }
+
+    @NotNull
+    public ItemBuilder lore(@Nullable final List<String> lore) {
+        if (Objects.isNull(lore)) {
+            return this;
         }
         this.lore.addAll(lore);
         return this;
@@ -64,12 +116,26 @@ public class ItemBuilder {
     }
 
     @NotNull
+    public ItemBuilder elseLore(@NotNull final BooleanSupplier condition,
+                                @NotNull final Supplier<List<String>> lores,
+                                @NotNull final Supplier<List<String>> elseLores) {
+        return elseDo(condition, builder -> builder.lore(lores.get()), builder -> builder.lore(elseLores.get()));
+    }
+
+    @NotNull
+    public ItemBuilder orLore(@NotNull final BooleanSupplier condition, @NotNull final Supplier<List<String>> lores) {
+        return orDo(condition, builder -> builder.lore(lores.get()));
+    }
+
+    @NotNull
+    public ItemBuilder orLore(@NotNull final BooleanSupplier condition, @NotNull final String... lores) {
+        return orDo(condition, builder -> builder.lore(lores));
+    }
+
+    @NotNull
     public ItemBuilder enchant(@Nullable final Enchantment enchant, final int level) {
         if (Objects.isNull(enchant)) {
             return this;
-        }
-        if (Objects.isNull(this.enchants)) {
-            this.enchants = new HashMap<>();
         }
         this.enchants.put(enchant, level);
         return this;
@@ -80,10 +146,27 @@ public class ItemBuilder {
         if (Objects.isNull(flag)) {
             return this;
         }
-        if (Objects.isNull(this.flags)) {
-            this.flags = new ArrayList<>();
-        }
         this.flags.add(flag);
+        return this;
+    }
+
+    @NotNull
+    public ItemBuilder orDo(@NotNull final BooleanSupplier condition, @Nullable final Consumer<ItemBuilder> todo) {
+        if (condition.getAsBoolean()) {
+            BasicUtil.canDo(todo, action -> action.accept(this));
+        }
+        return this;
+    }
+
+    @NotNull
+    public ItemBuilder elseDo(@NotNull final BooleanSupplier condition,
+                              @Nullable final Consumer<ItemBuilder> todo,
+                              @Nullable final Consumer<ItemBuilder> elseDo) {
+        if (condition.getAsBoolean()) {
+            BasicUtil.canDo(todo, action -> action.accept(this));
+        } else {
+            BasicUtil.canDo(elseDo, action -> action.accept(this));
+        }
         return this;
     }
 
@@ -112,19 +195,15 @@ public class ItemBuilder {
             meta.setDisplayName(I18n.color(this.display));
         }
 
-        if (Objects.nonNull(this.lore)) {
-            final List<String> color = new ArrayList<>(this.lore);
-            color.replaceAll(I18n::color);
-            meta.setLore(color);
+        final List<String> color = new ArrayList<>(this.lore);
+        color.replaceAll(I18n::color);
+        meta.setLore(color);
+
+        for (final Map.Entry<Enchantment, Integer> entry : this.enchants.entrySet()) {
+            meta.addEnchant(entry.getKey(), entry.getValue(), true);
         }
 
-        if (Objects.nonNull(this.enchants)) {
-            for (final Map.Entry<Enchantment, Integer> entry : this.enchants.entrySet()) {
-                meta.addEnchant(entry.getKey(), entry.getValue(), true);
-            }
-        }
-
-        if (Objects.nonNull(this.flags)) {
+        if (XMaterial.supports(8)) {
             for (final ItemFlag flag : this.flags) {
                 meta.addItemFlags(flag);
             }
